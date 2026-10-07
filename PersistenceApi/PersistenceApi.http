@@ -1,6 +1,6 @@
 @PersistenceApi_HostAddress = http://localhost:5125
 
-GET {{PersistenceApi_HostAddress}}/weatherforecast/
+GET {{PersistenceApi_HostAddress}}/health
 Accept: application/json
 
 ###

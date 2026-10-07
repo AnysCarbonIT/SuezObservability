@@ -1,4 +1,4 @@
-﻿
+﻿using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using System.Text;
 
@@ -8,9 +8,19 @@ namespace Producer.Services
     {
         private const string QueueName = "suez-messages";
 
+        private readonly ILogger<RabbitMqProducer> _logger;
+
+        public RabbitMqProducer(ILogger<RabbitMqProducer> logger)
+        {
+            _logger = logger;
+        }
+
+
         public async Task SendAsync()
         {
-            var factory = new ConnectionFactory
+            try
+            {
+                var factory = new ConnectionFactory
             {
                 HostName = "localhost",
                 UserName = "guest",
@@ -41,15 +51,25 @@ namespace Producer.Services
                 MessageId = message.Id.ToString()
             };
 
+            _logger.LogInformation("Envoi du message {MessageId} vers la queue {QueueName}", message.Id, QueueName);
             await channel.BasicPublishAsync(
                 exchange: string.Empty,
                 routingKey: QueueName,
                 mandatory: false,
                 basicProperties: properties,
                 body: body);
+            _logger.LogInformation("Message {MessageId} envoyé avec succès vers RabbitMQ", message.Id);
 
-            Console.WriteLine("Message envoyé dans RabbitMQ :");
-            Console.WriteLine(json);
+}
+             catch (Exception ex)
+            {
+                // conserve l'exception en cas d'échec réseau ou RabbitMQ.
+                _logger.LogError(
+                    ex,
+                    "Erreur lors de l'envoi du message vers RabbitMQ");
+
+                throw;
+            }
         }
     }
 }

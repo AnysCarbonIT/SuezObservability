@@ -1,7 +1,6 @@
-﻿using Producer.Models;
+﻿
 using RabbitMQ.Client;
 using System.Text;
-using System.Text.Json;
 
 namespace Producer.Services
 {
@@ -28,15 +27,11 @@ namespace Producer.Services
                 exclusive: false,
                 autoDelete: false,
                 arguments: null);
+            var messageFactory = new MessageFactory();
 
-            var message = new MessageData
-            {
-                Id = Guid.NewGuid(),
-                Message = "Message de test SUEZ",
-                CreatedAt = DateTime.UtcNow
-            };
+            var message = messageFactory.Create("Message de test SUEZ");
 
-            string json = JsonSerializer.Serialize(message);
+            string json = messageFactory.Serialize(message);
             byte[] body = Encoding.UTF8.GetBytes(json);
 
             var properties = new BasicProperties

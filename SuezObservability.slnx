@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="CacheApi/CacheApi.csproj" />
+  <Project Path="PersistenceApi/PersistenceApi.csproj" />
+  <Project Path="Producer/Producer.csproj" />
+</Solution>

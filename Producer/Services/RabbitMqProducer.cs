@@ -22,8 +22,8 @@ namespace Producer.Services
             {
                 var factory = new ConnectionFactory
             {
-                HostName = "localhost",
-                UserName = "guest",
+                    HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost",
+                    UserName = "guest",
                 Password = "guest",
                 ClientProvidedName = "SuezObservability.Producer"
             };

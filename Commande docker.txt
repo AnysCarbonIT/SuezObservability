@@ -1,0 +1,37 @@
+Commande docker :
+
+
+# PRODUCER [Lancer le Producer une fois → envoie un message puis le conteneur se supprime] :
+        docker compose run --rm producer
+---------------------------------------------
+
+# API 1 ON [Démarrer PersistenceApi] :
+        docker compose up -d persistenceapi
+
+# API 1 OFF [Arrêter PersistenceApi] :
+        docker compose stop persistenceapi
+
+# LOGS API 1 [Voir les logs de PersistenceApi en direct] :
+        docker compose logs -f persistenceapi
+
+----------------------------------------------
+
+
+
+
+
+----------------------------------------------
+# CONTAINERS [Voir les conteneurs actuellement actifs] :
+        docker ps
+
+
+# ALL ON [Démarrer tous les services définis dans Docker Compose] :
+        docker compose up -d
+
+
+# ALL OFF [Arrêter et supprimer les conteneurs du Docker Compose] :
+        docker compose down
+
+
+# REBUILD [Reconstruire les images puis démarrer les services] :
+        docker compose up -d --build

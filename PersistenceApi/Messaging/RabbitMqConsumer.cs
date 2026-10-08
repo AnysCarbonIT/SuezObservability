@@ -34,7 +34,7 @@ namespace PersistenceApi.Messaging
 
             var factory = new ConnectionFactory
             {
-                HostName = "localhost",
+                HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost",
                 UserName = "guest",
                 Password = "guest",
                 ClientProvidedName = "SuezObservability.PersistenceApi"

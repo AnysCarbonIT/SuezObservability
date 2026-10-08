@@ -29,7 +29,10 @@ namespace PersistenceApi.Services
             {
                 throw new InvalidOperationException("Impossible de désérialiser le message RabbitMQ.");
             }
-
+            if (string.IsNullOrWhiteSpace(message.Message))
+            {
+                throw new InvalidOperationException("Le message ne peut pas être vide.");
+            }
             _logger.LogInformation("Traitement du message {MessageId} - {Message}", message.Id, message.Message);
 
 

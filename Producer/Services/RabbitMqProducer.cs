@@ -7,6 +7,7 @@ using System.Text;
 using OpenTelemetry;
 
 
+
 namespace Producer.Services
 {
     public class RabbitMqProducer
@@ -44,7 +45,9 @@ namespace Producer.Services
                     arguments: null);
                 var messageFactory = new MessageFactory();
 
-                var message = messageFactory.Create("Message de test SUEZ");
+                Console.Write("Message à envoyer : ");
+                string? content = Console.ReadLine();
+                var message = messageFactory.Create(content ?? string.Empty);
 
                 string json = messageFactory.Serialize(message);
                 byte[] body = Encoding.UTF8.GetBytes(json);
@@ -53,18 +56,19 @@ namespace Producer.Services
                 using var activity = Telemetry.ProducerActivitySource.StartActivity("message.publish", ActivityKind.Producer);
                 activity?.SetTag("messaging.system", "rabbitmq");
                 activity?.SetTag("messaging.destination.name", QueueName);
-                activity?.SetTag("message.id", message.Id);
+                activity?.SetTag("messaging.message.id", message.Id);
 
                 var properties = new BasicProperties
                 {
                     ContentType = "application/json",
                     DeliveryMode = DeliveryModes.Persistent,
                     MessageId = message.Id.ToString(),
-                    Headers = new Dictionary<string, object>()
+                    Headers = new Dictionary<string, object?>()
                 };
-                var propagotor = Propagators.DefaultTextMapPropagator;
+                var propagator = Propagators.DefaultTextMapPropagator;
                 var propagationContext = new PropagationContext(activity?.Context ?? default, Baggage.Current);
-                propagotor.Inject(propagationContext, properties.Headers, (headers, key, value) => headers[key] = value);
+                propagator.Inject(propagationContext, properties.Headers, (headers, key, value) => {headers[key] = Encoding.UTF8.GetBytes(value);
+                }); 
 
                 _logger.LogInformation("Envoi du message {MessageId} vers la queue {QueueName}", message.Id, QueueName);
                 await channel.BasicPublishAsync(
@@ -74,9 +78,11 @@ namespace Producer.Services
                     basicProperties: properties,
                     body: body);
                 _logger.LogInformation("Message {MessageId} envoyé avec succès vers RabbitMQ", message.Id);
-                _logger.LogInformation(Activity.Current?.TraceId.ToString(), message.Id);
-               
-
+                _logger.LogInformation(
+                        "Message {MessageId} envoyé. TraceId={TraceId}, SpanId={SpanId}",
+                        message.Id,
+                        activity?.TraceId.ToString(),
+                        activity?.SpanId.ToString());
             }
              catch (Exception ex)
             {

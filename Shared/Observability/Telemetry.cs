@@ -21,5 +21,11 @@ namespace Shared.Observability
         public static readonly Meter ProducerMeter = new Meter(ProducerServiceName);
 
         public static readonly Meter PersistenceApiMeter = new Meter(PersistenceApiServiceName);
+
+        // Nombre de messages complètement traités avec succès par PersistenceApi.
+        public static readonly Counter<long> ProcessedMessages =PersistenceApiMeter.CreateCounter<long>("messages.processed");
+
+        // Nombre de messages dont le traitement a échoué.
+        public static readonly Counter<long> FailedMessages =PersistenceApiMeter.CreateCounter<long>("messages.failed");
     }
 }

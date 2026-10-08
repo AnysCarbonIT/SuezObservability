@@ -2,6 +2,7 @@ using PersistenceApi.Messaging;
 using PersistenceApi.Services;
 using PersistenceApi.Repositories;
 using Shared.Observability;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,7 +16,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddSuezObservability(
     Telemetry.PersistenceApiServiceName,
     Telemetry.PersistenceApiServiceName,
-    Telemetry.PersistenceApiServiceName);
+    Telemetry.PersistenceApiServiceName, tracing => tracing.AddNpgsql() );
 
 var app = builder.Build();
 

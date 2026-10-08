@@ -15,7 +15,7 @@ namespace Shared.Observability
             this IServiceCollection services,
             string serviceName,
             string activitySourceName,
-            string meterName)
+            string meterName, Action<TracerProviderBuilder>? configureTracing = null)
         {
             services
                 .AddOpenTelemetry() // active l'OpenTelemetry pour la collecte de traces
@@ -29,6 +29,7 @@ namespace Shared.Observability
                 {
                     tracing
                         .AddSource(activitySourceName);
+                        configureTracing?.Invoke(tracing);
                 })
                  .WithMetrics(metrics =>
                  {

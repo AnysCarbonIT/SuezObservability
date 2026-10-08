@@ -1,27 +1,29 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using Producer.Services;
 using Shared.Observability;
 
-var builder = Host.CreateApplicationBuilder(args);
+var services = new ServiceCollection();
 
-builder.Logging.AddConsole();
+services.AddLogging(logging =>
+{
+    logging.AddConsole();
+});
 
-builder.Services.AddSuezObservability(
+services.AddSuezObservability(
     Telemetry.ProducerServiceName,
     Telemetry.ProducerServiceName,
     Telemetry.ProducerServiceName);
 
-builder.Services.AddTransient<RabbitMqProducer>();
+services.AddTransient<RabbitMqProducer>();
 
-using var host = builder.Build();
+using var serviceProvider = services.BuildServiceProvider();
+serviceProvider.GetRequiredService<TracerProvider>();
+serviceProvider.GetRequiredService<MeterProvider>();
 
-await host.StartAsync();
+var producer =serviceProvider.GetRequiredService<RabbitMqProducer>();
 
-var producer =
-    host.Services.GetRequiredService<RabbitMqProducer>();
 
 await producer.SendAsync();
-
-await host.StopAsync();

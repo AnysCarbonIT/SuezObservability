@@ -1,8 +1,11 @@
 ﻿using Microsoft.Extensions.Logging;
+using OpenTelemetry.Context.Propagation;
 using RabbitMQ.Client;
 using Shared.Observability;
 using System.Diagnostics;
 using System.Text;
+using OpenTelemetry;
+
 
 namespace Producer.Services
 {
@@ -56,8 +59,12 @@ namespace Producer.Services
                 {
                     ContentType = "application/json",
                     DeliveryMode = DeliveryModes.Persistent,
-                    MessageId = message.Id.ToString()
+                    MessageId = message.Id.ToString(),
+                    Headers = new Dictionary<string, object>()
                 };
+                var propagotor = Propagators.DefaultTextMapPropagator;
+                var propagationContext = new PropagationContext(activity?.Context ?? default, Baggage.Current);
+                propagotor.Inject(propagationContext, properties.Headers, (headers, key, value) => headers[key] = value);
 
                 _logger.LogInformation("Envoi du message {MessageId} vers la queue {QueueName}", message.Id, QueueName);
                 await channel.BasicPublishAsync(

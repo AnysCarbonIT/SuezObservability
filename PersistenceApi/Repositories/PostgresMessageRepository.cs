@@ -25,7 +25,8 @@ namespace PersistenceApi.Repositories
 
             const string sql = @"
                 INSERT INTO messages (id, message, created_at)
-                VALUES (@id, @message, @created_at);";
+                VALUES (@id, @message, @created_at)
+                ON CONFLICT (id) DO NOTHING;"; // insertion idempotente, si le message existe déjà, aucune nouvelle ligne n'est créée.
 
             try { 
             await using var connection = await _connectionFactory.CreateOpenConnectionAsync();

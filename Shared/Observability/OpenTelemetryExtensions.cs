@@ -27,9 +27,10 @@ namespace Shared.Observability
                 })
                 .WithTracing(tracing =>
                 {
-                    tracing
-                        .AddSource(activitySourceName);
-                        configureTracing?.Invoke(tracing);
+                    // Écoute les Activity créées par le service.
+                    tracing.AddSource(activitySourceName);
+                    // Permet à chaque application d'ajouter ses instrumentations spécifiques.
+                    configureTracing?.Invoke(tracing);
                 })
                  .WithMetrics(metrics =>
                  {

@@ -4,21 +4,20 @@ using System.Text.Json;
 
 namespace PersistenceApi.Services
 {
-    /// <summary>
-    /// Traite les messages reçus par l'application.
-    /// </summary>
     public class MessageProcessor : IMessageProcessor
     {
-        /// <summary>
-        /// Désérialise le JSON reçu en MessageData puis applique le traitement.
-        /// </summary>
-        private readonly ILogger<MessageProcessor> _logger;
         private readonly IMessageRepository _messageRepository;
+        private readonly CacheApiClient _cacheApiClient;
+        private readonly ILogger<MessageProcessor> _logger;
 
-        public MessageProcessor(ILogger<MessageProcessor> logger, IMessageRepository messageRepository)
+        public MessageProcessor(
+            IMessageRepository messageRepository,
+            CacheApiClient cacheApiClient,
+            ILogger<MessageProcessor> logger)
         {
-            _logger = logger;
             _messageRepository = messageRepository;
+            _cacheApiClient = cacheApiClient;
+            _logger = logger;
         }
 
         public async Task ProcessAsync(string json)
@@ -27,16 +26,26 @@ namespace PersistenceApi.Services
 
             if (message == null)
             {
-                throw new InvalidOperationException("Impossible de désérialiser le message RabbitMQ.");
+                throw new InvalidOperationException(
+                    "Impossible de désérialiser le message RabbitMQ.");
             }
+
             if (string.IsNullOrWhiteSpace(message.Message))
             {
-                throw new InvalidOperationException("Le message ne peut pas être vide.");
+                throw new InvalidOperationException(
+                    "Le message ne peut pas être vide.");
             }
-            _logger.LogInformation("Traitement du message {MessageId} - {Message}", message.Id, message.Message);
 
+            _logger.LogInformation(
+                "Traitement du message {MessageId} - {Message}",
+                message.Id,
+                message.Message);
 
+            // Première persistance enregistrée dans PostgreSQL
             await _messageRepository.SaveAsync(message);
+
+            // Deuxième étape : envoi vers CacheApi
+            await _cacheApiClient.StoreAsync(message);
         }
     }
 }

@@ -30,7 +30,7 @@ namespace PersistenceApi.Messaging
         protected override async Task ExecuteAsync(
             CancellationToken stoppingToken)
         {
-            //  indique que le consumer démarre et précise la queue écoutée.
+            // indique que le consumer démarre et précise la queue écoutée.
             _logger.LogInformation(
                 "Démarrage du consumer RabbitMQ sur la queue {QueueName}",
                 QueueName);
@@ -62,6 +62,8 @@ namespace PersistenceApi.Messaging
 
             consumer.ReceivedAsync += async (_, eventArgs) =>
             {
+                Activity? activity = null;
+
                 try
                 {
                     // Récupération du contexte OpenTelemetry envoyé par le Producer
@@ -79,7 +81,7 @@ namespace PersistenceApi.Messaging
                                 {
                                     return new[]
                                     {
-                            Encoding.UTF8.GetString(bytes)
+                                        Encoding.UTF8.GetString(bytes)
                                     };
                                 }
 
@@ -87,7 +89,7 @@ namespace PersistenceApi.Messaging
                                 {
                                     return new[]
                                     {
-                            Encoding.UTF8.GetString(memory.Span)
+                                        Encoding.UTF8.GetString(memory.Span)
                                     };
                                 }
                             }
@@ -96,7 +98,7 @@ namespace PersistenceApi.Messaging
                         });
 
                     // Création du span Consumer rattaché à la trace du Producer
-                    using var activity =
+                    activity =
                         Telemetry.PersistenceApiActivitySource.StartActivity(
                             "message.consume",
                             ActivityKind.Consumer,
@@ -110,38 +112,72 @@ namespace PersistenceApi.Messaging
 
                     // confirme la réception d'un message RabbitMQ.
                     _logger.LogInformation(
-                            "Message RabbitMQ reçu. DeliveryTag={DeliveryTag}, TraceId={TraceId}, SpanId={SpanId}",
-                            eventArgs.DeliveryTag,
-                            activity?.TraceId.ToString(),
-                            activity?.SpanId.ToString());
+                        "Message RabbitMQ reçu. DeliveryTag={DeliveryTag}, TraceId={TraceId}, SpanId={SpanId}",
+                        eventArgs.DeliveryTag,
+                        activity?.TraceId.ToString(),
+                        activity?.SpanId.ToString());
 
                     byte[] body = eventArgs.Body.ToArray();
 
                     string json = Encoding.UTF8.GetString(body);
 
-                    // await pour futuir persistance postgrsql
                     await _messageProcessor.ProcessAsync(json);
 
-                    // await pour acquitter le message RabbitMQ après bon traitement
+                    // acquitte le message RabbitMQ après bon traitement
                     await channel.BasicAckAsync(
                         deliveryTag: eventArgs.DeliveryTag,
                         multiple: false,
                         cancellationToken: stoppingToken);
-                    // Metrique :  traitement complet du message a réussi.
-                    Telemetry.ProcessedMessages.Add(1);
-                    // confirme que le message a été traité puis acquitté.
-                    _logger.LogInformation("Message traité et acquitté. DeliveryTag={DeliveryTag}",eventArgs.DeliveryTag);
 
+                    // métrique : traitement complet réussi
+                    Telemetry.ProcessedMessages.Add(1);
+
+                    _logger.LogInformation(
+                        "Message traité et acquitté. DeliveryTag={DeliveryTag}",
+                        eventArgs.DeliveryTag);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    // métrique : traitement fonctionnel en échec
+                    Telemetry.FailedMessages.Add(1);
+
+                    activity?.SetStatus(ActivityStatusCode.Error,ex.Message);
+
+                    _logger.LogWarning(
+                        ex,
+                        "Message RabbitMQ invalide. DeliveryTag={DeliveryTag}",
+                        eventArgs.DeliveryTag);
+
+                    // message refusé et non remis dans la queue
+                    await channel.BasicNackAsync(
+                        deliveryTag: eventArgs.DeliveryTag,
+                        multiple: false,
+                        requeue: false,
+                        cancellationToken: stoppingToken);
                 }
                 catch (Exception ex)
                 {
-                    // enregistre l'erreur avec l'exception complète.
-                    _logger.LogError(ex,"Erreur lors du traitement du message RabbitMQ. DeliveryTag={DeliveryTag}",eventArgs.DeliveryTag);
-
-                    // Metrique :  traitement du message a échoué.
+                    // erreur technique : PostgreSQL, réseau, API distante...
                     Telemetry.FailedMessages.Add(1);
 
-                    throw;
+                    activity?.SetStatus(ActivityStatusCode.Error,ex.Message);
+
+                    _logger.LogError(
+                        ex,
+                        "Erreur technique lors du traitement du message RabbitMQ. DeliveryTag={DeliveryTag}",
+                        eventArgs.DeliveryTag);
+
+                    // erreur potentiellement temporaire :
+                    // le message est replacé dans la queue
+                    await channel.BasicNackAsync(
+                        deliveryTag: eventArgs.DeliveryTag,
+                        multiple: false,
+                        requeue: true,
+                        cancellationToken: stoppingToken);
+                }
+                finally
+                {
+                    activity?.Dispose();
                 }
             };
 
@@ -151,7 +187,9 @@ namespace PersistenceApi.Messaging
                 consumer: consumer,
                 cancellationToken: stoppingToken);
 
-            await Task.Delay(Timeout.Infinite,stoppingToken);
+            await Task.Delay(
+                Timeout.Infinite,
+                stoppingToken);
         }
     }
 }

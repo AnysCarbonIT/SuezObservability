@@ -20,11 +20,40 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=suezdb;Username=suez;Password=suezpassword
 
+      # Adresse interne Docker de CacheApi.
+      CacheApi__BaseUrl: http://cacheapi:8080
+
     depends_on:
       rabbitmq:
         condition: service_healthy
 
       postgres:
+        condition: service_healthy
+
+      cacheapi:
+        condition: service_started
+
+      otel-collector:
+        condition: service_started
+
+
+  cacheapi:
+    build:
+      context: .
+      dockerfile: CacheApi/Dockerfile
+
+    container_name: suez-cache-api
+
+    ports:
+      - "5126:8080"
+
+    environment:
+      <<: *otel
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Redis: redis:6379
+
+    depends_on:
+      redis:
         condition: service_healthy
 
       otel-collector:
@@ -106,6 +135,12 @@ services:
 
     volumes:
       - redis-data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 
   otel-collector:

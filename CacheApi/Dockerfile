@@ -2,15 +2,15 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 WORKDIR /src
 
-COPY Producer/Producer.csproj Producer/
+COPY CacheApi/CacheApi.csproj CacheApi/
 COPY Shared/Shared.csproj Shared/
 
-RUN dotnet restore Producer/Producer.csproj
+RUN dotnet restore CacheApi/CacheApi.csproj
 
-COPY Producer/ Producer/
+COPY CacheApi/ CacheApi/
 COPY Shared/ Shared/
 
-RUN dotnet publish Producer/Producer.csproj \
+RUN dotnet publish CacheApi/CacheApi.csproj \
     -c Release \
     -o /app/publish
 
@@ -21,4 +21,4 @@ WORKDIR /app
 
 COPY --from=build /app/publish .
 
-ENTRYPOINT ["dotnet", "Producer.dll"]
+ENTRYPOINT ["dotnet", "CacheApi.dll"]

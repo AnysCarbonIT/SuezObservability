@@ -3,4 +3,5 @@
   <Project Path="PersistenceApi/PersistenceApi.csproj" />
   <Project Path="Producer.Tests/Producer.Tests.csproj" Id="d475936f-6fe7-41f4-a960-13210c900d8e" />
   <Project Path="Producer/Producer.csproj" />
+  <Project Path="Shared/Shared.csproj" Id="1b776f5a-6801-4303-9cd3-e3009a64617f" />
 </Solution>

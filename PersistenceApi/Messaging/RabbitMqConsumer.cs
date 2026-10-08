@@ -68,8 +68,10 @@ namespace PersistenceApi.Messaging
                     // confirme la réception d'un message RabbitMQ.
                     _logger.LogInformation("Message RabbitMQ reçu. DeliveryTag={DeliveryTag}",eventArgs.DeliveryTag);
 
+                    // await pour futuir persistance postgrsql
                     await _messageProcessor.ProcessAsync(json);
 
+                    // await pour acquitter le message RabbitMQ après bon traitement
                     await channel.BasicAckAsync(
                         deliveryTag: eventArgs.DeliveryTag,
                         multiple: false,

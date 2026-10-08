@@ -1,4 +1,5 @@
 ﻿using PersistenceApi.Models;
+using PersistenceApi.Repositories;
 using System.Text.Json;
 
 namespace PersistenceApi.Services
@@ -12,24 +13,27 @@ namespace PersistenceApi.Services
         /// Désérialise le JSON reçu en MessageData puis applique le traitement.
         /// </summary>
         private readonly ILogger<MessageProcessor> _logger;
+        private readonly IMessageRepository _messageRepository;
 
-        public MessageProcessor(ILogger<MessageProcessor> logger)
+        public MessageProcessor(ILogger<MessageProcessor> logger, IMessageRepository messageRepository)
         {
             _logger = logger;
+            _messageRepository = messageRepository;
         }
 
-        public Task ProcessAsync(string json)
+        public async Task ProcessAsync(string json)
         {
             var message = JsonSerializer.Deserialize<MessageData>(json);
 
             if (message == null)
             {
-                throw new InvalidOperationException("Unable to deserialize RabbitMQ message.");
+                throw new InvalidOperationException("Impossible de désérialiser le message RabbitMQ.");
             }
 
-            _logger.LogInformation("Message reçu : {MessageId} - {Message}",message.Id,message.Message);
+            _logger.LogInformation("Traitement du message {MessageId} - {Message}", message.Id, message.Message);
 
-            return Task.CompletedTask;
+
+            await _messageRepository.SaveAsync(message);
         }
     }
 }

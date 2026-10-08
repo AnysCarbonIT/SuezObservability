@@ -1,14 +1,27 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Producer.Services;
+using Shared.Observability;
 
-using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
-{
-    builder.AddConsole();
-});
+var builder = Host.CreateApplicationBuilder(args);
 
-ILogger<RabbitMqProducer> logger =
-    loggerFactory.CreateLogger<RabbitMqProducer>();
+builder.Logging.AddConsole();
 
-var producer = new RabbitMqProducer(logger);
+builder.Services.AddSuezObservability(
+    Telemetry.ProducerServiceName,
+    Telemetry.ProducerServiceName,
+    Telemetry.ProducerServiceName);
+
+builder.Services.AddTransient<RabbitMqProducer>();
+
+using var host = builder.Build();
+
+await host.StartAsync();
+
+var producer =
+    host.Services.GetRequiredService<RabbitMqProducer>();
 
 await producer.SendAsync();
+
+await host.StopAsync();

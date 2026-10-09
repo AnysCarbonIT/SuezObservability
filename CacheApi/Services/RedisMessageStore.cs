@@ -45,7 +45,7 @@ namespace CacheApi.Services
                         "L'écriture Redis a échoué.");
                 }
 
-                Telemetry.CacheWrites.Add(1);
+                Telemetry.CacheOperations.Add(1, new KeyValuePair<string, object?>("status", "success"));
 
                 _logger.LogInformation(
                     "Message {MessageId} enregistré dans Redis avec la clé {RedisKey}",
@@ -54,7 +54,7 @@ namespace CacheApi.Services
             }
             catch (Exception ex)
             {
-                Telemetry.CacheFailures.Add(1);
+                Telemetry.CacheOperations.Add(1, new KeyValuePair<string, object?>("status", "failed"));
 
                 activity?.SetStatus(
                     ActivityStatusCode.Error,

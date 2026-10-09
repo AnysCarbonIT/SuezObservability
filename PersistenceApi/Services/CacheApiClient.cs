@@ -5,6 +5,9 @@ namespace PersistenceApi.Services
 {
     public class CacheApiClient
     {
+        public const string ClientName = "CacheApi";
+        public const string StoreMessagePath = "/cache/messages";
+
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<CacheApiClient> _logger;
 
@@ -16,17 +19,17 @@ namespace PersistenceApi.Services
             _logger = logger;
         }
 
-        public async Task StoreAsync(MessageData message)
+        public async Task StoreAsync(MessageData message, CancellationToken cancellationToken = default)
         {
             // Récupère le client HTTP configuré pour appeler CacheApi.
-            HttpClient client = _httpClientFactory.CreateClient("CacheApi");
+            using HttpClient client = _httpClientFactory.CreateClient(ClientName);
 
             _logger.LogInformation(
                 "Envoi du message {MessageId} vers CacheApi",
                 message.Id);
-            // Envoie vers CacheApi méthode POST OpenTelemetry propage automatiquement la trace dans les headers HTTP
-            HttpResponseMessage response = await client.PostAsJsonAsync("/cache/messages",message);
-            // Génère une erreur si CacheApi ne répond pas avec un code HTTP de succès
+            // OpenTelemetry transmet le contexte de trace dans les headers HTTP.
+            using HttpResponseMessage response = await client.PostAsJsonAsync(StoreMessagePath, message, cancellationToken);
+            // Un échec HTTP remonte au consumer pour déclencher les retries.
             response.EnsureSuccessStatusCode();
 
             _logger.LogInformation("Message {MessageId} envoyé avec succès vers CacheApi",message.Id);

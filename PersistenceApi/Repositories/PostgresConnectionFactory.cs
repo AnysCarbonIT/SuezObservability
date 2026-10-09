@@ -11,12 +11,12 @@ namespace PersistenceApi.Repositories
             _connectionString = configuration.GetConnectionString("Postgres") ?? throw new InvalidOperationException("La chaîne de connexion PostgreSQL est manquante.");
         }
 
-        public async Task<NpgsqlConnection> CreateOpenConnectionAsync()
+        public async Task<NpgsqlConnection> CreateOpenConnectionAsync(CancellationToken cancellationToken = default)
         {
             var connection = new NpgsqlConnection(_connectionString);
             try
             {
-                await connection.OpenAsync();
+                await connection.OpenAsync(cancellationToken);
 
                 return connection;
             }

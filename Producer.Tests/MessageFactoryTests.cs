@@ -21,6 +21,13 @@ namespace Producer.Tests
         }
 
         [Test]
+        public void Create_ShouldRejectEmptyContent()
+        {
+            var factory = new MessageFactory();
+            Assert.Throws<ArgumentException>(() => factory.Create("   "));
+        }
+
+        [Test]
         public void Serialize_ShouldContainMessageData()
         {
             // Arrange

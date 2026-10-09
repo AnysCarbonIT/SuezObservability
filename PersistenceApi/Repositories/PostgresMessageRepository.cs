@@ -14,7 +14,7 @@ namespace PersistenceApi.Repositories
             _connectionFactory = connectionFactory;
             _logger = logger;
         }
-        public async Task SaveAsync(MessageData message)
+        public async Task SaveAsync(MessageData message, CancellationToken cancellationToken = default)
         {
             using var activity = Telemetry.PersistenceApiActivitySource.StartActivity("postgres.insert", ActivityKind.Client);
 
@@ -28,24 +28,28 @@ namespace PersistenceApi.Repositories
                 VALUES (@id, @message, @created_at)
                 ON CONFLICT (id) DO NOTHING;"; // insertion idempotente, si le message existe déjà, aucune nouvelle ligne n'est créée.
 
-            try { 
-            await using var connection = await _connectionFactory.CreateOpenConnectionAsync();
+            try
+            {
+                await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
 
-            await using var command = new NpgsqlCommand(sql, connection);
+                await using var command = new NpgsqlCommand(sql, connection);
 
-            command.Parameters.AddWithValue("id", message.Id);
+                command.Parameters.AddWithValue("id", message.Id);
 
-            command.Parameters.AddWithValue("message", message.Message ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("message", message.Message ?? (object)DBNull.Value);
 
-            command.Parameters.AddWithValue("created_at", message.CreatedAt);
+                command.Parameters.AddWithValue("created_at", message.CreatedAt);
 
-            int rowsAffected = await command.ExecuteNonQueryAsync();
+                int rowsAffected = await command.ExecuteNonQueryAsync(cancellationToken);
 
-            _logger.LogInformation(
-                "Message {MessageId} enregistré dans PostgreSQL. RowsAffected={RowsAffected}",
-                message.Id,
-                rowsAffected); }
-            catch(Exception ex) {activity?.SetStatus(ActivityStatusCode.Error,ex.Message);
+                _logger.LogInformation(
+                    "Message {MessageId} enregistré dans PostgreSQL. RowsAffected={RowsAffected}",
+                    message.Id,
+                    rowsAffected);
+            }
+            catch (Exception ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
 
                 throw;
             }

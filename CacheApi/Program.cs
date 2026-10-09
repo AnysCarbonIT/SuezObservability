@@ -36,6 +36,12 @@ app.MapPost(
         MessageData message,
         RedisMessageStore store) =>
     {
+        if (message.Id == Guid.Empty || string.IsNullOrWhiteSpace(message.Message) ||
+            message.CreatedAt == default || message.CreatedAt.Kind != DateTimeKind.Utc)
+        {
+            return Results.BadRequest("Le message doit avoir un identifiant, un contenu et une date UTC valides.");
+        }
+
         await store.SaveAsync(message);
 
         return Results.Ok();

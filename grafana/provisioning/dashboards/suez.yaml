@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: SuezObservability
+    folder: SuezObservability
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

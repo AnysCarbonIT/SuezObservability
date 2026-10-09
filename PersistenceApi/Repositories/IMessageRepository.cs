@@ -5,6 +5,6 @@ namespace PersistenceApi.Repositories
 {
     public interface IMessageRepository
     {
-        Task SaveAsync(MessageData message);
+        Task SaveAsync(MessageData message, CancellationToken cancellationToken = default);
     }
 }

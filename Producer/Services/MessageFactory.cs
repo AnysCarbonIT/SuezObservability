@@ -7,6 +7,11 @@ namespace Producer.Services
     {
         public MessageData Create(string content)
         {
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                throw new ArgumentException("Le message ne peut pas être vide.", nameof(content));
+            }
+
             return new MessageData
             {
                 Id = Guid.NewGuid(),

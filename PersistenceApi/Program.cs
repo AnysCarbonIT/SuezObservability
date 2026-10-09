@@ -28,7 +28,7 @@ builder.Services.AddSuezObservability(
     });
 // Configure l'adresse utilisée par PersistenceApi pour appeler CacheApi.
 builder.Services.AddHttpClient(
-    "CacheApi",
+    CacheApiClient.ClientName,
     client =>
     {
         string baseUrl =
@@ -36,6 +36,7 @@ builder.Services.AddHttpClient(
             ?? "http://localhost:5126";
 
         client.BaseAddress = new Uri(baseUrl);
+        client.Timeout = TimeSpan.FromSeconds(10);
     });
 
 builder.Services.AddSingleton<CacheApiClient>();

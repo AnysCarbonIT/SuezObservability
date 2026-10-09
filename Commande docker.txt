@@ -35,3 +35,7 @@ Commande docker :
 
 # REBUILD [Reconstruire les images puis démarrer les services] :
         docker compose up -d --build
+
+
+
+mettre les credential dans appsetto

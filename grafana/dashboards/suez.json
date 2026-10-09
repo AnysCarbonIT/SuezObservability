@@ -1,0 +1,29 @@
+{
+  "uid": "suez-observability",
+  "title": "SuezObservability",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "title": "Messages : résultats définitifs depuis le démarrage", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "expr": "sum by (status) (messages_total)", "legendFormat": "{{status}}" }]
+    },
+    {
+      "id": 2, "title": "Redis : écritures depuis le démarrage", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "expr": "sum by (status) (cache_operations_total)", "legendFormat": "{{status}}" }]
+    },
+    {
+      "id": 3, "title": "Durée moyenne du traitement, retries compris", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "sum(rate(message_duration_seconds_sum[5m])) / sum(rate(message_duration_seconds_count[5m]))", "legendFormat": "durée moyenne" }]
+    }
+  ]
+}

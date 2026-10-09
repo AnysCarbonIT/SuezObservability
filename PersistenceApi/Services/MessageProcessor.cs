@@ -20,20 +20,25 @@ namespace PersistenceApi.Services
             _logger = logger;
         }
 
-        public async Task ProcessAsync(string json)
+        public async Task ProcessAsync(string json, CancellationToken cancellationToken = default)
         {
             var message = JsonSerializer.Deserialize<MessageData>(json);
 
             if (message == null)
             {
-                throw new InvalidOperationException(
+                throw new InvalidMessageException(
                     "Impossible de désérialiser le message RabbitMQ.");
             }
 
             if (string.IsNullOrWhiteSpace(message.Message))
             {
-                throw new InvalidOperationException(
+                throw new InvalidMessageException(
                     "Le message ne peut pas être vide.");
+            }
+
+            if (message.Id == Guid.Empty || message.CreatedAt == default || message.CreatedAt.Kind != DateTimeKind.Utc)
+            {
+                throw new InvalidMessageException("Le message doit avoir un identifiant et une date UTC valides.");
             }
 
             _logger.LogInformation(
@@ -42,10 +47,10 @@ namespace PersistenceApi.Services
                 message.Message);
 
             // Première persistance enregistrée dans PostgreSQL
-            await _messageRepository.SaveAsync(message);
+            await _messageRepository.SaveAsync(message, cancellationToken);
 
             // Deuxième étape : envoi vers CacheApi
-            await _cacheApiClient.StoreAsync(message);
+            await _cacheApiClient.StoreAsync(message, cancellationToken);
         }
     }
 }

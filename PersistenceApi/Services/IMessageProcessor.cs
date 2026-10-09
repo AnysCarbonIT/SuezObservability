@@ -8,6 +8,6 @@
         /// <summary>
         /// Traite un message reçu au format JSON.
         /// </summary>
-        Task ProcessAsync(string json);
+        Task ProcessAsync(string json, CancellationToken cancellationToken = default);
     }
 }

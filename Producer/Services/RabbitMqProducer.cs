@@ -5,6 +5,7 @@ using Shared.Observability;
 using System.Diagnostics;
 using System.Text;
 using OpenTelemetry;
+using Shared.Messaging;
 
 
 
@@ -12,7 +13,7 @@ namespace Producer.Services
 {
     public class RabbitMqProducer
     {
-        private const string QueueName = "suez-messages";
+        private const string QueueName = MessageQueues.Main;
 
         private readonly ILogger<RabbitMqProducer> _logger;
 
@@ -24,13 +25,21 @@ namespace Producer.Services
 
         public async Task SendAsync()
         {
+            Console.Write("Message à envoyer : ");
+            string? content = Console.ReadLine();
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                _logger.LogWarning("Aucun message envoyé : la saisie est vide.");
+                return;
+            }
+
             try
             {
-                    var factory = new ConnectionFactory
+                var factory = new ConnectionFactory
                 {
-                        HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost",
-                        UserName = "guest",
-                    Password = "guest",
+                    HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost",
+                    UserName = Environment.GetEnvironmentVariable("RABBITMQ_USER") ?? "guest",
+                    Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD") ?? "guest",
                     ClientProvidedName = "SuezObservability.Producer"
                 };
 
@@ -42,12 +51,10 @@ namespace Producer.Services
                     durable: true,
                     exclusive: false,
                     autoDelete: false,
-                    arguments: null);
+                    arguments: MessageQueues.Arguments);
                 var messageFactory = new MessageFactory();
 
-                Console.Write("Message à envoyer : ");
-                string? content = Console.ReadLine();
-                var message = messageFactory.Create(content ?? string.Empty);
+                var message = messageFactory.Create(content);
 
                 string json = messageFactory.Serialize(message);
                 byte[] body = Encoding.UTF8.GetBytes(json);
@@ -67,8 +74,10 @@ namespace Producer.Services
                 };
                 var propagator = Propagators.DefaultTextMapPropagator;
                 var propagationContext = new PropagationContext(activity?.Context ?? default, Baggage.Current);
-                propagator.Inject(propagationContext, properties.Headers, (headers, key, value) => {headers[key] = Encoding.UTF8.GetBytes(value);
-                }); 
+                propagator.Inject(propagationContext, properties.Headers, (headers, key, value) =>
+                {
+                    headers[key] = Encoding.UTF8.GetBytes(value);
+                });
 
                 _logger.LogInformation("Envoi du message {MessageId} vers la queue {QueueName}", message.Id, QueueName);
                 await channel.BasicPublishAsync(
@@ -84,7 +93,7 @@ namespace Producer.Services
                         activity?.TraceId.ToString(),
                         activity?.SpanId.ToString());
             }
-             catch (Exception ex)
+            catch (Exception ex)
             {
                 // conserve l'exception en cas d'échec réseau ou RabbitMQ.
                 _logger.LogError(

@@ -23,14 +23,13 @@ namespace Shared.Observability
 
         public static readonly Meter CacheApiMeter = new Meter(CacheApiServiceName);
 
-        // Nombre de messages complètement traités avec succès par PersistenceApi.
-        public static readonly Counter<long> ProcessedMessages =PersistenceApiMeter.CreateCounter<long>("messages.processed");
+        // Un résultat par livraison, après les éventuels retries : processed ou failed.
+        public static readonly Counter<long> Messages = PersistenceApiMeter.CreateCounter<long>("messages");
 
-        // Nombre de messages dont le traitement a échoué.
-        public static readonly Counter<long> FailedMessages =PersistenceApiMeter.CreateCounter<long>("messages.failed");
-        // Nombre d'écritures réussies dans Redis.
-        public static readonly Counter<long> CacheWrites =CacheApiMeter.CreateCounter<long>("cache.writes");
-        // Nombre d'échecs lors des écritures dans Redis.
-        public static readonly Counter<long> CacheFailures =CacheApiMeter.CreateCounter<long>("cache.failures");
+        // Durée totale du traitement, pauses entre tentatives comprises.
+        public static readonly Histogram<double> MessageDuration = PersistenceApiMeter.CreateHistogram<double>("message.duration", "s");
+
+        // Un résultat par écriture Redis : success ou failed.
+        public static readonly Counter<long> CacheOperations = CacheApiMeter.CreateCounter<long>("cache.operations");
     }
 }

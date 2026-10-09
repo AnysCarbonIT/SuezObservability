@@ -61,6 +61,7 @@ services:
 
 
   producer:
+    profiles: ["tools"]
     build:
       context: .
       dockerfile: Producer/Dockerfile
@@ -82,6 +83,9 @@ services:
   rabbitmq:
     image: rabbitmq:4-management
 
+    # Garde le même nom de noeud pour retrouver les données après un down/up.
+    hostname: rabbitmq
+
     container_name: suez-rabbitmq
 
     ports:
@@ -96,7 +100,8 @@ services:
       - rabbitmq-data:/var/lib/rabbitmq
 
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      # Attend le broker et ses ports avant de démarrer le consumer.
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_port_connectivity"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -117,6 +122,7 @@ services:
 
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U suez -d suezdb"]
@@ -165,6 +171,10 @@ services:
 
     ports:
       - "3000:3000"
+
+    volumes:
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning/dashboards/suez.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/suez.yaml:ro
 
 
 volumes:

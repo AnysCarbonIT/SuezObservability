@@ -5,6 +5,8 @@ using System.Text;
 using OpenTelemetry.Context.Propagation;
 using Shared.Observability;
 using System.Diagnostics;
+using System.Text.Json;
+using Shared.Messaging;
 
 namespace PersistenceApi.Messaging
 {
@@ -14,7 +16,8 @@ namespace PersistenceApi.Messaging
     /// </summary>
     public class RabbitMqConsumer : BackgroundService
     {
-        private const string QueueName = "suez-messages";
+        private const string QueueName = MessageQueues.Main;
+        private const int MaxAttempts = 3;
 
         private readonly IMessageProcessor _messageProcessor;
         private readonly ILogger<RabbitMqConsumer> _logger;
@@ -38,8 +41,8 @@ namespace PersistenceApi.Messaging
             var factory = new ConnectionFactory
             {
                 HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost",
-                UserName = "guest",
-                Password = "guest",
+                UserName = Environment.GetEnvironmentVariable("RABBITMQ_USER") ?? "guest",
+                Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD") ?? "guest",
                 ClientProvidedName = "SuezObservability.PersistenceApi"
             };
 
@@ -51,18 +54,30 @@ namespace PersistenceApi.Messaging
                     cancellationToken: stoppingToken);
 
             await channel.QueueDeclareAsync(
-                queue: QueueName,
+                queue: MessageQueues.Failed,
                 durable: true,
                 exclusive: false,
                 autoDelete: false,
                 arguments: null,
                 cancellationToken: stoppingToken);
 
+            await channel.QueueDeclareAsync(
+                queue: QueueName,
+                durable: true,
+                exclusive: false,
+                autoDelete: false,
+                arguments: MessageQueues.Arguments,
+                cancellationToken: stoppingToken);
+
+            // Un seul message en cours : les retries ne saturent pas les dépendances.
+            await channel.BasicQosAsync(0, 1, false, stoppingToken);
+
             var consumer = new AsyncEventingBasicConsumer(channel);
 
             consumer.ReceivedAsync += async (_, eventArgs) =>
             {
                 Activity? activity = null;
+                long startedAt = Stopwatch.GetTimestamp();
 
                 try
                 {
@@ -121,25 +136,50 @@ namespace PersistenceApi.Messaging
 
                     string json = Encoding.UTF8.GetString(body);
 
-                    await _messageProcessor.ProcessAsync(json);
+                    // On garde le message non acquitté pendant les trois tentatives.
+                    // PostgreSQL et Redis réutilisent le même Id lors d'une reprise.
+                    for (int attempt = 1; attempt <= MaxAttempts; attempt++)
+                    {
+                        try
+                        {
+                            await _messageProcessor.ProcessAsync(json, stoppingToken);
+                            break;
+                        }
+                        // On réessaie seulement les erreurs techniques, sauf si l'application s'arrête.
+                        catch (Exception ex) when (
+                            ex is not InvalidMessageException &&
+                            ex is not JsonException &&
+                            !stoppingToken.IsCancellationRequested &&
+                            attempt < MaxAttempts)
+                        {
+                            _logger.LogWarning(ex,
+                                "Tentative {Attempt}/{MaxAttempts} échouée. Nouvel essai dans 5 secondes.",
+                                attempt, MaxAttempts);
+                            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                        }
+                    }
 
-                    // acquitte le message RabbitMQ après bon traitement
+                    // ACK seulement quand PostgreSQL et le cache ont réussi.
                     await channel.BasicAckAsync(
                         deliveryTag: eventArgs.DeliveryTag,
                         multiple: false,
                         cancellationToken: stoppingToken);
 
                     // métrique : traitement complet réussi
-                    Telemetry.ProcessedMessages.Add(1);
+                    Telemetry.Messages.Add(1, new KeyValuePair<string, object?>("status", "processed"));
 
                     _logger.LogInformation(
                         "Message traité et acquitté. DeliveryTag={DeliveryTag}",
                         eventArgs.DeliveryTag);
                 }
-                catch (InvalidOperationException ex)
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    // À l'arrêt, pas d'ACK : RabbitMQ pourra redistribuer le message.
+                }
+                catch (Exception ex) when (ex is InvalidMessageException or JsonException)
                 {
                     // métrique : traitement fonctionnel en échec
-                    Telemetry.FailedMessages.Add(1);
+                    Telemetry.Messages.Add(1, new KeyValuePair<string, object?>("status", "failed"));
 
                     activity?.SetStatus(ActivityStatusCode.Error,ex.Message);
 
@@ -148,7 +188,7 @@ namespace PersistenceApi.Messaging
                         "Message RabbitMQ invalide. DeliveryTag={DeliveryTag}",
                         eventArgs.DeliveryTag);
 
-                    // message refusé et non remis dans la queue
+                    // Données invalides : pas de retry, direction la file d'échec.
                     await channel.BasicNackAsync(
                         deliveryTag: eventArgs.DeliveryTag,
                         multiple: false,
@@ -158,7 +198,7 @@ namespace PersistenceApi.Messaging
                 catch (Exception ex)
                 {
                     // erreur technique : PostgreSQL, réseau, API distante...
-                    Telemetry.FailedMessages.Add(1);
+                    Telemetry.Messages.Add(1, new KeyValuePair<string, object?>("status", "failed"));
 
                     activity?.SetStatus(ActivityStatusCode.Error,ex.Message);
 
@@ -167,16 +207,16 @@ namespace PersistenceApi.Messaging
                         "Erreur technique lors du traitement du message RabbitMQ. DeliveryTag={DeliveryTag}",
                         eventArgs.DeliveryTag);
 
-                    // erreur potentiellement temporaire :
-                    // le message est replacé dans la queue
+                    // Après les trois tentatives, RabbitMQ conserve le message dans la file d'échec.
                     await channel.BasicNackAsync(
                         deliveryTag: eventArgs.DeliveryTag,
                         multiple: false,
-                        requeue: true,
+                        requeue: false,
                         cancellationToken: stoppingToken);
                 }
                 finally
                 {
+                    Telemetry.MessageDuration.Record(Stopwatch.GetElapsedTime(startedAt).TotalSeconds);
                     activity?.Dispose();
                 }
             };

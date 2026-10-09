@@ -1,13 +1,12 @@
-﻿namespace PersistenceApi.Services
+namespace PersistenceApi.Services;
+
+/// <summary>
+/// Définit le traitement applicatif à appliquer à un message reçu.
+/// </summary>
+public interface IMessageProcessor
 {
     /// <summary>
-    /// Définit le traitement applicatif à appliquer à un message reçu.
+    /// Traite un message reçu au format JSON.
     /// </summary>
-    public interface IMessageProcessor
-    {
-        /// <summary>
-        /// Traite un message reçu au format JSON.
-        /// </summary>
-        Task ProcessAsync(string json, CancellationToken cancellationToken = default);
-    }
+    Task ProcessAsync(string json, CancellationToken cancellationToken = default);
 }

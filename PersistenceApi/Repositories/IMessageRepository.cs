@@ -1,10 +1,9 @@
-﻿using System;
-using PersistenceApi.Models;
+using System;
+using Shared.Models;
 
-namespace PersistenceApi.Repositories
+namespace PersistenceApi.Repositories;
+
+public interface IMessageRepository
 {
-    public interface IMessageRepository
-    {
-        Task SaveAsync(MessageData message, CancellationToken cancellationToken = default);
-    }
+    Task SaveAsync(MessageData message, CancellationToken cancellationToken = default);
 }

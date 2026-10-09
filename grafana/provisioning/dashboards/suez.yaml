@@ -3,5 +3,7 @@ providers:
   - name: SuezObservability
     folder: SuezObservability
     type: file
+    # Vérifie le fichier régulièrement, même si Docker ne transmet pas ses changements.
+    updateIntervalSeconds: 30
     options:
       path: /var/lib/grafana/dashboards

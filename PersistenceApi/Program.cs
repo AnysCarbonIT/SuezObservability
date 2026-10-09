@@ -4,21 +4,26 @@ using PersistenceApi.Messaging;
 using PersistenceApi.Repositories;
 using PersistenceApi.Services;
 using Shared.Observability;
-using System.Diagnostics;
+using Shared.Messaging;
+using PersistenceApi.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddRabbitMq(builder.Configuration, Telemetry.ServiceName);
+// La connexion démarre une fois et reste ouverte pour le consumer.
+builder.Services.AddSingleton<RabbitMqConnection>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<RabbitMqConnection>());
 
 builder.Services.AddSingleton<IMessageProcessor, MessageProcessor>();
 builder.Services.AddSingleton<PostgresConnectionFactory>();
 builder.Services.AddSingleton<IMessageRepository, PostgresMessageRepository>();
-builder.Services.AddHostedService<RabbitMqConsumer>();
 
 builder.Services.AddOpenApi();
 
 builder.Services.AddSuezObservability(
-    Telemetry.PersistenceApiServiceName,
-    Telemetry.PersistenceApiServiceName,
-    Telemetry.PersistenceApiServiceName,
+    Telemetry.ServiceName,
+    Telemetry.ServiceName,
+    Telemetry.ServiceName,
     tracing =>
     {
         tracing
@@ -26,6 +31,8 @@ builder.Services.AddSuezObservability(
             .AddAspNetCoreInstrumentation() // Trace les requêtes HTTP reçues par l'API.
             .AddHttpClientInstrumentation(); // Trace les appels HTTP vers CacheApi et propage le TraceId.
     });
+// OpenTelemetry est démarré avant de consommer les messages déjà en attente.
+builder.Services.AddHostedService<RabbitMqConsumer>();
 // Configure l'adresse utilisée par PersistenceApi pour appeler CacheApi.
 builder.Services.AddHttpClient(
     CacheApiClient.ClientName,

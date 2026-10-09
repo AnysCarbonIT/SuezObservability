@@ -1,72 +1,62 @@
-﻿using CacheApi.Models;
-using Shared.Observability;
+using Shared.Models;
+using CacheApi.Observability;
 using StackExchange.Redis;
 using System.Diagnostics;
 using System.Text.Json;
 
-namespace CacheApi.Services
+namespace CacheApi.Services;
+
+public class RedisMessageStore(
+    IConnectionMultiplexer redis,
+    ILogger<RedisMessageStore> logger)
 {
-    public class RedisMessageStore
+    public async Task SaveAsync(MessageData message)
     {
-        private readonly IConnectionMultiplexer _redis;
-        private readonly ILogger<RedisMessageStore> _logger;
+        using var activity =
+            Telemetry.ActivitySource.StartActivity(
+                "redis.set",
+                ActivityKind.Client);
 
-        public RedisMessageStore(
-            IConnectionMultiplexer redis,
-            ILogger<RedisMessageStore> logger)
+        activity?.SetTag("db.system", "redis");
+        activity?.SetTag("messaging.message.id", message.Id);
+
+        try
         {
-            _redis = redis;
-            _logger = logger;
+            IDatabase database = redis.GetDatabase();
+
+            string key = $"message:{message.Id}";
+            string value = JsonSerializer.Serialize(message);
+
+            bool success =
+                await database.StringSetAsync(key, value);
+
+            if (!success)
+            {
+                throw new InvalidOperationException(
+                    "L'écriture Redis a échoué.");
+            }
+
+            Telemetry.CacheOperations.Add(1, new KeyValuePair<string, object?>("status", "success"));
+
+            logger.LogInformation(
+                "Message {MessageId} enregistré dans Redis avec la clé {RedisKey}",
+                message.Id,
+                key);
         }
-
-        public async Task SaveAsync(MessageData message)
+        catch (Exception ex)
         {
-            using var activity =
-                Telemetry.CacheApiActivitySource.StartActivity(
-                    "redis.set",
-                    ActivityKind.Client);
+            Telemetry.CacheOperations.Add(1, new KeyValuePair<string, object?>("status", "failed"));
 
-            activity?.SetTag("db.system", "redis");
-            activity?.SetTag("messaging.message.id", message.Id);
+            activity?.SetStatus(
+                ActivityStatusCode.Error,
+                ex.Message);
 
-            try
-            {
-                IDatabase database = _redis.GetDatabase();
+            logger.LogError(
+                ex,
+                "Erreur lors de l'enregistrement du message {MessageId} dans Redis",
+                message.Id);
 
-                string key = $"message:{message.Id}";
-                string value = JsonSerializer.Serialize(message);
-
-                bool success =
-                    await database.StringSetAsync(key, value);
-
-                if (!success)
-                {
-                    throw new InvalidOperationException(
-                        "L'écriture Redis a échoué.");
-                }
-
-                Telemetry.CacheOperations.Add(1, new KeyValuePair<string, object?>("status", "success"));
-
-                _logger.LogInformation(
-                    "Message {MessageId} enregistré dans Redis avec la clé {RedisKey}",
-                    message.Id,
-                    key);
-            }
-            catch (Exception ex)
-            {
-                Telemetry.CacheOperations.Add(1, new KeyValuePair<string, object?>("status", "failed"));
-
-                activity?.SetStatus(
-                    ActivityStatusCode.Error,
-                    ex.Message);
-
-                _logger.LogError(
-                    ex,
-                    "Erreur lors de l'enregistrement du message {MessageId} dans Redis",
-                    message.Id);
-
-                throw;
-            }
+            throw;
         }
     }
 }

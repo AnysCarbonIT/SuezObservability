@@ -1,107 +1,91 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
+using Producer.Observability;
 using RabbitMQ.Client;
-using Shared.Observability;
+using Shared.Messaging;
 using System.Diagnostics;
 using System.Text;
-using OpenTelemetry;
-using Shared.Messaging;
 
+namespace Producer.Services;
 
-
-namespace Producer.Services
+public class RabbitMqProducer(
+    RabbitMqConnection rabbitMqConnection,
+    MessageFactory messageFactory,
+    IOptions<RabbitMqOptions> options,
+    ILogger<RabbitMqProducer> logger)
 {
-    public class RabbitMqProducer
+    private readonly string _queueName = options.Value.QueueName;
+
+    public async Task SendAsync(CancellationToken cancellationToken = default)
     {
-        private const string QueueName = MessageQueues.Main;
-
-        private readonly ILogger<RabbitMqProducer> _logger;
-
-        public RabbitMqProducer(ILogger<RabbitMqProducer> logger)
+        Console.Write("Message à envoyer : ");
+        string? content = Console.ReadLine();
+        if (string.IsNullOrWhiteSpace(content))
         {
-            _logger = logger;
+            logger.LogWarning("Aucun message envoyé : la saisie est vide.");
+            return;
         }
 
-
-        public async Task SendAsync()
+        try
         {
-            Console.Write("Message à envoyer : ");
-            string? content = Console.ReadLine();
-            if (string.IsNullOrWhiteSpace(content))
+            // Le channel est propre à l'envoi, la connexion reste ouverte dans le singleton.
+            await using var channel = await rabbitMqConnection.Connection.CreateChannelAsync(
+                cancellationToken: cancellationToken);
+
+            await channel.QueueDeclareAsync(
+                queue: _queueName,
+                durable: true,
+                exclusive: false,
+                autoDelete: false,
+                arguments: null,
+                cancellationToken: cancellationToken);
+
+            var message = messageFactory.Create(content);
+            byte[] body = Encoding.UTF8.GetBytes(messageFactory.Serialize(message));
+
+            // Ajout du span Producer pour suivre le message.
+            using var activity = Telemetry.ActivitySource.StartActivity("message.publish", ActivityKind.Producer);
+            activity?.SetTag("messaging.system", "rabbitmq");
+            activity?.SetTag("messaging.destination.name", _queueName);
+            activity?.SetTag("messaging.message.id", message.Id);
+
+            var properties = new BasicProperties
             {
-                _logger.LogWarning("Aucun message envoyé : la saisie est vide.");
-                return;
-            }
+                ContentType = "application/json",
+                DeliveryMode = DeliveryModes.Persistent,
+                MessageId = message.Id.ToString(),
+                Headers = new Dictionary<string, object?>()
+            };
 
-            try
+            // Transmet le contexte de trace au consumer dans les headers RabbitMQ.
+            var propagationContext = new PropagationContext(activity?.Context ?? default, Baggage.Current);
+            Propagators.DefaultTextMapPropagator.Inject(propagationContext, properties.Headers, (headers, key, value) =>
             {
-                var factory = new ConnectionFactory
-                {
-                    HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost",
-                    UserName = Environment.GetEnvironmentVariable("RABBITMQ_USER") ?? "guest",
-                    Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD") ?? "guest",
-                    ClientProvidedName = "SuezObservability.Producer"
-                };
+                headers[key] = Encoding.UTF8.GetBytes(value);
+            });
 
-                await using var connection = await factory.CreateConnectionAsync();
-                await using var channel = await connection.CreateChannelAsync();
-
-                await channel.QueueDeclareAsync(
-                    queue: QueueName,
-                    durable: true,
-                    exclusive: false,
-                    autoDelete: false,
-                    arguments: MessageQueues.Arguments);
-                var messageFactory = new MessageFactory();
-
-                var message = messageFactory.Create(content);
-
-                string json = messageFactory.Serialize(message);
-                byte[] body = Encoding.UTF8.GetBytes(json);
-                
-                // Ajout span opentelemetry
-                using var activity = Telemetry.ProducerActivitySource.StartActivity("message.publish", ActivityKind.Producer);
-                activity?.SetTag("messaging.system", "rabbitmq");
-                activity?.SetTag("messaging.destination.name", QueueName);
-                activity?.SetTag("messaging.message.id", message.Id);
-
-                var properties = new BasicProperties
-                {
-                    ContentType = "application/json",
-                    DeliveryMode = DeliveryModes.Persistent,
-                    MessageId = message.Id.ToString(),
-                    Headers = new Dictionary<string, object?>()
-                };
-                var propagator = Propagators.DefaultTextMapPropagator;
-                var propagationContext = new PropagationContext(activity?.Context ?? default, Baggage.Current);
-                propagator.Inject(propagationContext, properties.Headers, (headers, key, value) =>
-                {
-                    headers[key] = Encoding.UTF8.GetBytes(value);
-                });
-
-                _logger.LogInformation("Envoi du message {MessageId} vers la queue {QueueName}", message.Id, QueueName);
-                await channel.BasicPublishAsync(
-                    exchange: string.Empty,
-                    routingKey: QueueName,
-                    mandatory: false,
-                    basicProperties: properties,
-                    body: body);
-                _logger.LogInformation("Message {MessageId} envoyé avec succès vers RabbitMQ", message.Id);
-                _logger.LogInformation(
-                        "Message {MessageId} envoyé. TraceId={TraceId}, SpanId={SpanId}",
-                        message.Id,
-                        activity?.TraceId.ToString(),
-                        activity?.SpanId.ToString());
-            }
-            catch (Exception ex)
-            {
-                // conserve l'exception en cas d'échec réseau ou RabbitMQ.
-                _logger.LogError(
-                    ex,
-                    "Erreur lors de l'envoi du message vers RabbitMQ");
-
-                throw;
-            }
+            logger.LogInformation("Envoi du message {MessageId} vers la queue {QueueName}", message.Id, _queueName);
+            await channel.BasicPublishAsync(
+                exchange: string.Empty,
+                routingKey: _queueName,
+                mandatory: false,
+                basicProperties: properties,
+                body: body,
+                cancellationToken: cancellationToken);
+            logger.LogInformation("Message {MessageId} envoyé avec succès vers RabbitMQ", message.Id);
+            logger.LogInformation(
+                "Message {MessageId} envoyé. TraceId={TraceId}, SpanId={SpanId}",
+                message.Id,
+                activity?.TraceId.ToString(),
+                activity?.SpanId.ToString());
+        }
+        catch (Exception ex)
+        {
+            // Conserve l'exception en cas d'échec réseau ou RabbitMQ.
+            logger.LogError(ex, "Erreur lors de l'envoi du message vers RabbitMQ");
+            throw;
         }
     }
 }

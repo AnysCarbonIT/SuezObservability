@@ -16,7 +16,7 @@ services:
 
     environment:
       <<: *otel
-      RABBITMQ_HOST: rabbitmq
+      RabbitMq__HostName: rabbitmq
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=suezdb;Username=suez;Password=suezpassword
 
@@ -70,7 +70,7 @@ services:
 
     environment:
       <<: *otel
-      RABBITMQ_HOST: rabbitmq
+      RabbitMq__HostName: rabbitmq
 
     depends_on:
       rabbitmq:

@@ -1,29 +1,63 @@
 {
   "uid": "suez-observability",
   "title": "SuezObservability",
+  "description": "Résultats des messages et des écritures Redis. Comparer les compteurs avant et après un envoi.",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
   "time": { "from": "now-15m", "to": "now" },
   "panels": [
     {
-      "id": 1, "title": "Messages : résultats définitifs depuis le démarrage", "type": "timeseries",
+      "id": 1, "title": "Messages acceptés · cumul", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
-      "targets": [{ "refId": "A", "expr": "sum by (status) (messages_total)", "legendFormat": "{{status}}" }]
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "refId": "A", "expr": "sum(messages_total{job=\"SuezObservability.PersistenceApi\",status=\"processed\"}) or vector(0)", "instant": true }]
     },
     {
-      "id": 2, "title": "Redis : écritures depuis le démarrage", "type": "timeseries",
+      "id": 2, "title": "Messages rejetés · cumul", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
-      "targets": [{ "refId": "A", "expr": "sum by (status) (cache_operations_total)", "legendFormat": "{{status}}" }]
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 4 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "fixed", "fixedColor": "red" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "refId": "A", "expr": "sum(messages_total{job=\"SuezObservability.PersistenceApi\",status=\"failed\"}) or vector(0)", "instant": true }]
     },
     {
-      "id": 3, "title": "Durée moyenne du traitement, retries compris", "type": "timeseries",
+      "id": 3, "title": "Durée moyenne · cumul", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
-      "targets": [{ "refId": "A", "expr": "sum(rate(message_duration_seconds_sum[5m])) / sum(rate(message_duration_seconds_count[5m]))", "legendFormat": "durée moyenne" }]
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 4 },
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 2, "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "refId": "A", "expr": "(sum(message_duration_seconds_sum{job=\"SuezObservability.PersistenceApi\"}) / clamp_min(sum(message_duration_seconds_count{job=\"SuezObservability.PersistenceApi\"}), 1)) or vector(0)", "instant": true }]
+    },
+    {
+      "id": 4, "title": "Messages · acceptés et rejetés", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 9 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "min": 0 }, "overrides": [
+        { "matcher": { "id": "byName", "options": "acceptés" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+        { "matcher": { "id": "byName", "options": "rejetés" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+      ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "refId": "A", "expr": "sum(messages_total{job=\"SuezObservability.PersistenceApi\",status=\"processed\"}) or vector(0)", "legendFormat": "acceptés" },
+        { "refId": "B", "expr": "sum(messages_total{job=\"SuezObservability.PersistenceApi\",status=\"failed\"}) or vector(0)", "legendFormat": "rejetés" }
+      ]
+    },
+    {
+      "id": 5, "title": "Redis · écritures réussies et échouées", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 9 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "min": 0 }, "overrides": [
+        { "matcher": { "id": "byName", "options": "réussies" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+        { "matcher": { "id": "byName", "options": "échouées" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+      ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "refId": "A", "expr": "sum(cache_operations_total{job=\"SuezObservability.CacheApi\",status=\"success\"}) or vector(0)", "legendFormat": "réussies" },
+        { "refId": "B", "expr": "sum(cache_operations_total{job=\"SuezObservability.CacheApi\",status=\"failed\"}) or vector(0)", "legendFormat": "échouées" }
+      ]
     }
   ]
 }

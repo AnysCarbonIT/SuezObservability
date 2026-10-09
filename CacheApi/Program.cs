@@ -1,4 +1,5 @@
-using CacheApi.Models;
+using Shared.Models;
+using CacheApi.Observability;
 using CacheApi.Services;
 using OpenTelemetry.Trace;
 using Shared.Observability;
@@ -7,9 +8,9 @@ using StackExchange.Redis;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSuezObservability(
-    Telemetry.CacheApiServiceName,
-    Telemetry.CacheApiServiceName,
-    Telemetry.CacheApiServiceName,
+    Telemetry.ServiceName,
+    Telemetry.ServiceName,
+    Telemetry.ServiceName,
     tracing =>
     {
         tracing.AddAspNetCoreInstrumentation();
@@ -36,11 +37,11 @@ app.MapPost(
         MessageData message,
         RedisMessageStore store) =>
     {
-        if (message.Id == Guid.Empty || string.IsNullOrWhiteSpace(message.Message) ||
-            message.CreatedAt == default || message.CreatedAt.Kind != DateTimeKind.Utc)
+        if (string.IsNullOrWhiteSpace(message.Message))
         {
-            return Results.BadRequest("Le message doit avoir un identifiant, un contenu et une date UTC valides.");
+            return Results.BadRequest("Le message ne peut pas être vide.");
         }
+
 
         await store.SaveAsync(message);
 
